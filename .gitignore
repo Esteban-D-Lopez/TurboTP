@@ -33,3 +33,8 @@ node_modules/
 dist/
 .DS_Store
 coverage/
+
+# Project specific
+legacy_ui/
+data/
+chroma_db/

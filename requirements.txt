@@ -1,0 +1,13 @@
+langgraph
+langchain
+langchain-text-splitters
+langchain-google-genai
+langchain-community
+streamlit
+arize-phoenix
+arize-phoenix-otel
+openinference-instrumentation-langchain
+chromadb
+pypdf
+python-dotenv
+watchdog
