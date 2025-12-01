@@ -64,10 +64,60 @@ def add_document_to_kb(uploaded_file) -> str:
         vectorstore = get_vectorstore()
         vectorstore.add_documents(texts)
         
+        # 5. Update Tracking File
+        tracking_file = "./chroma_db/ingested_files.json"
+        ingested_files = {}
+        if os.path.exists(tracking_file):
+            try:
+                with open(tracking_file, "r") as f:
+                    ingested_files = json.load(f)
+            except:
+                pass
+        
+        ingested_files[uploaded_file.name] = {"chunks": len(texts)}
+        with open(tracking_file, "w") as f:
+            json.dump(ingested_files, f)
+        
         return f"Successfully added **{uploaded_file.name}** to Knowledge Base."
         
     except Exception as e:
         return f"Error adding document: {str(e)}"
+
+def remove_document(filename: str) -> str:
+    """
+    Remove a document from the Knowledge Base (Vector Store and File System).
+    """
+    try:
+        # 1. Remove from Vector Store
+        vectorstore = get_vectorstore()
+        # Access the underlying Chroma collection to delete by metadata
+        # Note: vectorstore._collection is the Chroma collection object
+        vectorstore._collection.delete(where={"source": filename})
+        
+        # 2. Remove from File System
+        file_path = os.path.join(KNOWLEDGE_BASE_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        # 3. Update Tracking File
+        tracking_file = "./chroma_db/ingested_files.json"
+        if os.path.exists(tracking_file):
+            try:
+                with open(tracking_file, "r") as f:
+                    ingested_files = json.load(f)
+                
+                if filename in ingested_files:
+                    del ingested_files[filename]
+                    
+                with open(tracking_file, "w") as f:
+                    json.dump(ingested_files, f)
+            except:
+                pass
+                
+        return f"Successfully removed **{filename}**."
+        
+    except Exception as e:
+        return f"Error removing document: {str(e)}"
 
 def clear_knowledge_base():
     """Clear all documents from knowledge base and vector store."""

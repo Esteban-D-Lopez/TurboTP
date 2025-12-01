@@ -10,7 +10,7 @@ def render_sidebar():
         # Mode Selection
         mode = st.radio(
             "Mode",
-            ["Research Center", "Document Composer", "Agent Assistant"],
+            ["Agent Assistant", "Research Center", "Document Composer"],
             key="mode_selection"
         )
         

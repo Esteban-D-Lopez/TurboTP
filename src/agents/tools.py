@@ -7,22 +7,78 @@ from langchain_community.utilities import GoogleSearchAPIWrapper
 from googleapiclient.discovery import build
 from typing import List, Optional
 
+# Retriever imports
+from src.utils.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
+from langchain_core.documents import Document
+
 # Initialize Vector Store (Lazy loading to avoid issues during import if not ready)
 def get_vectorstore():
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     return Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
 
+
 @tool
-def search_regulations(query: str):
+def search_regulations(query: str, filter_source: Optional[str] = None):
     """
-    Searches the Transfer Pricing regulatory knowledge base (IRC 482, OECD Guidelines).
-    Use this to find specific legal texts, regulations, and guidelines.
+    Searches the Transfer Pricing regulatory knowledge base (IRC 482, OECD Guidelines) AND user-uploaded internal documents.
+    Uses Hybrid Search (Semantic + Keyword) for better accuracy.
+    
+    Args:
+        query: The search query.
+        filter_source: Optional filename to restrict search to (e.g., "MockCompanyData.docx"). Use this if the user asks to check a specific file.
     """
     try:
         vectorstore = get_vectorstore()
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-        docs = retriever.invoke(query)
-        return "\n\n".join([d.page_content for d in docs])
+        
+        # 1. Configure Semantic Retriever (Chroma)
+        chroma_search_kwargs = {"k": 20}
+        if filter_source:
+            chroma_search_kwargs["filter"] = {"source": filter_source}
+        chroma_retriever = vectorstore.as_retriever(search_kwargs=chroma_search_kwargs)
+        
+        # 2. Configure Keyword Retriever (BM25)
+        # Fetch documents to build BM25 index
+        # If filtering, only fetch relevant docs to speed up and improve precision
+        get_kwargs = {}
+        if filter_source:
+            get_kwargs["where"] = {"source": filter_source}
+            
+        # Get all docs (or filtered subset) from Chroma to build in-memory BM25
+        # Note: For very large DBs, this might be slow. Consider caching or persistent BM25.
+        collection_data = vectorstore.get(**get_kwargs)
+        
+        documents = []
+        if collection_data['documents']:
+            for i, text in enumerate(collection_data['documents']):
+                metadata = collection_data['metadatas'][i] if collection_data['metadatas'] else {}
+                documents.append(Document(page_content=text, metadata=metadata))
+        
+        if not documents:
+            return "No documents found to search."
+
+        bm25_retriever = BM25Retriever.from_documents(documents)
+        bm25_retriever.k = 20  # Match k with Chroma
+        
+        # 3. Create Ensemble Retriever
+        # Weight: 0.5 Semantic, 0.5 Keyword
+        ensemble_retriever = EnsembleRetriever(
+            retrievers=[chroma_retriever, bm25_retriever],
+            weights=[0.5, 0.5]
+        )
+        
+        docs = ensemble_retriever.invoke(query)
+        
+        if not docs:
+            return "No relevant documents found."
+            
+        # Format output with sources
+        results = []
+        for d in docs:
+            source = d.metadata.get("source", "Unknown")
+            results.append(f"Source: {source}\nContent: {d.page_content}")
+            
+        return "\n\n---\n\n".join(results)
     except Exception as e:
         return f"Error searching regulations: {str(e)}"
 

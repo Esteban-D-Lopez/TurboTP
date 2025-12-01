@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 from src.agents.graph import create_graph
-from src.utils.rag_manager import list_documents, add_document_to_kb
+from src.utils.rag_manager import list_documents, add_document_to_kb, remove_document
 
 def render_assistant_view():
     # Sidebar for Knowledge Base
@@ -10,14 +10,18 @@ def render_assistant_view():
         st.info("Documents uploaded here are accessible to the Assistant.")
         
         # File Uploader
-        uploaded_file = st.file_uploader("Add Document", type=['pdf', 'docx', 'txt', 'md'])
-        if uploaded_file:
-            with st.spinner("Processing..."):
-                result = add_document_to_kb(uploaded_file)
-                if "Success" in result:
-                    st.success(result)
-                else:
-                    st.error(result)
+        uploaded_files = st.file_uploader("Add Documents", type=['pdf', 'docx', 'txt', 'md'], accept_multiple_files=True)
+        if uploaded_files:
+            with st.spinner(f"Processing {len(uploaded_files)} files..."):
+                for uploaded_file in uploaded_files:
+                    # Check if already processed in this session to avoid re-ingestion on every rerun
+                    # (Simple check: if file is in list_documents, skip? No, user might want to update)
+                    # For now, just process. The rag_manager should handle it.
+                    result = add_document_to_kb(uploaded_file)
+                    if "Success" in result:
+                        st.toast(f"✅ {uploaded_file.name} added")
+                    else:
+                        st.error(f"Error {uploaded_file.name}: {result}")
         
         st.divider()
         
@@ -26,12 +30,37 @@ def render_assistant_view():
         docs = list_documents()
         if docs:
             for doc in docs:
-                st.text(f"📄 {doc}")
+                col1, col2 = st.columns([0.85, 0.15])
+                with col1:
+                    st.text(f"📄 {doc}")
+                with col2:
+                    if st.button("🗑️", key=f"del_{doc}", help=f"Remove {doc}"):
+                        with st.spinner("Removing..."):
+                            res = remove_document(doc)
+                            st.toast(res)
+                            st.rerun()
         else:
             st.caption("No documents added yet.")
 
     st.header("Agent Assistant")
-    st.markdown("Chat with the Transfer Pricing expert.")
+    
+    # Intro for TurboTP
+    if not st.session_state.messages:
+        st.markdown("""
+        ### 👋 Welcome to TurboTP
+        
+        **TurboTP** is your AI-powered workspace for Transfer Pricing consulting.
+        
+        **What can you do here?**
+        *   **Agent Assistant (This Tab):** Chat with your internal documents and regulations. Upload files in the sidebar to ask specific questions about them.
+        *   **Research Center:** Perform deep, multi-step research on complex topics (e.g., "Compare US vs OECD methods for intangibles").
+        *   **Document Composer:** Draft compliant TP documentation (Local Files, Master Files) using your uploaded data.
+        
+        ---
+        **Start by asking a question below or uploading a document!**
+        """)
+    else:
+        st.markdown("Chat with the Transfer Pricing expert.")
     
     # Initialize chat history
     if "messages" not in st.session_state:

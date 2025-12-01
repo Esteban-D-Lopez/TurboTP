@@ -225,13 +225,28 @@ def composer_executor_node(state: AgentState):
             llm = get_llm()
             context = "\n\n".join([sr["result"] for sr in step_results if "result" in sr])
             
-            draft_prompt = f"""Based on the following data:
+            # Fetch Regulatory Context (RAG)
+            # Determine what to search for based on the step or section
+            # We can use the step description itself as a query, or construct one
+            reg_query = f"guidelines for {step}"
+            regulatory_context = search_regulations.invoke(reg_query)
+            
+            draft_prompt = f"""You are a Transfer Pricing expert. Draft the following section of a TP report.
 
+**Task:** {step}
+
+**Regulatory Guidelines (Context):**
+{regulatory_context}
+
+**Available Data & Analysis:**
 {context}
 
-{step}
-
-Provide a well-structured draft following Transfer Pricing documentation standards."""
+**Instructions:**
+1. Write a professional, compliant draft for this section.
+2. CITE the regulatory guidelines where appropriate (e.g., "In accordance with OECD Guidelines...").
+3. Use the provided data to support your statements.
+4. If data is missing, state what is needed rather than making it up.
+"""
             
             result = llm.invoke(draft_prompt).content
         

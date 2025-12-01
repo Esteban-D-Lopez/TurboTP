@@ -360,6 +360,7 @@ def assistant_node(state: AgentState):
         "**CORE INSTRUCTIONS:**\n"
         "1. **Check Context First:** Before searching, check the conversation history. If the answer is already there, use it.\n"
         "2. **Internal Docs & Regulations:** If the user asks about internal agreements, policies, or specific regulations, USE the 'search_regulations' tool. This tool searches BOTH external regulations and the internal Knowledge Base.\n"
+        "   - **IMPORTANT:** If the user mentions a specific file (e.g., 'check MockCompanyData.docx'), you MUST pass the filename to the `filter_source` argument of `search_regulations` to find it.\n"
         "3. **Tool Usage:** Use 'search_regulations' for domain knowledge/docs, and 'web_search' for real-time info/news.\n"
         "4. **Formatting:** Follow user formatting instructions strictly.\n"
         "5. **Quality:** Provide clear, concise answers. Do NOT claim you don't have access to internal documents without trying to search for them first."
