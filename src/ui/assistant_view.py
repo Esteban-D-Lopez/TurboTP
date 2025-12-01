@@ -4,6 +4,10 @@ from src.agents.graph import create_graph
 from src.utils.rag_manager import list_documents, add_document_to_kb, remove_document
 
 def render_assistant_view():
+    # Initialize chat history first
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
     # Sidebar for Knowledge Base
     with st.sidebar:
         st.header("📚 Knowledge Base")
@@ -47,7 +51,7 @@ def render_assistant_view():
     # Intro for TurboTP
     if not st.session_state.messages:
         st.markdown("""
-        ### 👋 Welcome to TurboTP
+        ### Welcome to TurboTP
         
         **TurboTP** is your AI-powered workspace for Transfer Pricing consulting.
         
@@ -62,10 +66,6 @@ def render_assistant_view():
     else:
         st.markdown("Chat with the Transfer Pricing expert.")
     
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
     # Display chat messages from history on app rerun
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
