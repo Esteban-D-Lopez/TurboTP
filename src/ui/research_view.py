@@ -201,12 +201,21 @@ def render_research_view():
                 
                 # Create state with full conversation context
                 app = create_graph()
+                
+                # Extract previous findings for context
+                previous_findings = None
+                for msg in reversed(st.session_state.research_history):
+                    if msg["role"] == "assistant":
+                        previous_findings = msg["content"]
+                        break
+                
                 follow_up_state = {
                     "messages": conversation_messages,
                     "current_mode": "research",
                     "research_topic": topic,
                     "jurisdiction": jurisdiction,
-                    "web_sources": st.session_state.get("web_sources", {})
+                    "web_sources": st.session_state.get("web_sources", {}),
+                    "research_findings": previous_findings  # Pass findings to trigger correct routing
                 }
                 
                 # Stream the agent's reasoning
@@ -248,12 +257,29 @@ def render_research_view():
                                         if is_ai:
                                             # Robust content extraction
                                             content = None
+                                            raw_content = None
+                                            
                                             if hasattr(latest_msg, 'content'):
-                                                content = str(latest_msg.content)
+                                                raw_content = latest_msg.content
                                             elif isinstance(latest_msg, dict) and 'content' in latest_msg:
-                                                content = str(latest_msg['content'])
+                                                raw_content = latest_msg['content']
                                             elif isinstance(latest_msg, str):
-                                                content = latest_msg
+                                                raw_content = latest_msg
+                                                
+                                            # Handle list vs string content
+                                            if isinstance(raw_content, list):
+                                                text_parts = []
+                                                for item in raw_content:
+                                                    if isinstance(item, dict):
+                                                        if 'text' in item:
+                                                            text_parts.append(item['text'])
+                                                        elif 'content' in item:
+                                                            text_parts.append(item['content'])
+                                                    elif isinstance(item, str):
+                                                        text_parts.append(item)
+                                                content = "\n".join(text_parts)
+                                            else:
+                                                content = str(raw_content) if raw_content else None
                                                 
                                             if content:
                                                 final_response = content

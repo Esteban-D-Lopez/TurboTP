@@ -1,8 +1,35 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 from src.agents.graph import create_graph
+from src.utils.rag_manager import list_documents, add_document_to_kb
 
 def render_assistant_view():
+    # Sidebar for Knowledge Base
+    with st.sidebar:
+        st.header("📚 Knowledge Base")
+        st.info("Documents uploaded here are accessible to the Assistant.")
+        
+        # File Uploader
+        uploaded_file = st.file_uploader("Add Document", type=['pdf', 'docx', 'txt', 'md'])
+        if uploaded_file:
+            with st.spinner("Processing..."):
+                result = add_document_to_kb(uploaded_file)
+                if "Success" in result:
+                    st.success(result)
+                else:
+                    st.error(result)
+        
+        st.divider()
+        
+        # List Documents
+        st.subheader("Active Documents")
+        docs = list_documents()
+        if docs:
+            for doc in docs:
+                st.text(f"📄 {doc}")
+        else:
+            st.caption("No documents added yet.")
+
     st.header("Agent Assistant")
     st.markdown("Chat with the Transfer Pricing expert.")
     

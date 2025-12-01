@@ -29,12 +29,15 @@ def parse_step_for_tool(step_text: str) -> Tuple[str, str]:
     """
     step_lower = step_text.lower()
     
-    # Detect tool based on keywords
-    if "youtube" in step_lower or "video" in step_lower:
+    # Detect tool based on explicit tool name or keywords
+    if "youtube_search" in step_lower or "youtube" in step_lower or "video" in step_lower:
         tool = "youtube_search"
-    elif "web" in step_lower or "online" in step_lower or "internet" in step_lower:
+    elif "web_search" in step_lower or "web" in step_lower or "online" in step_lower or "internet" in step_lower or "site" in step_lower or "google" in step_lower:
         tool = "web_search"
-    elif "regulation" in step_lower or "knowledge base" in step_lower or "search" in step_lower:
+    elif any(x in step_lower for x in ["irs", "oecd", "deloitte", "pwc", "ey", "kpmg"]) and "search" in step_lower:
+        # If mentioning specific web sources with "search", likely web search
+        tool = "web_search"
+    elif "search_regulations" in step_lower or "regulation" in step_lower or "knowledge base" in step_lower:
         tool = "search_regulations"
     else:
         # Default to regulations search
