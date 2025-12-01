@@ -12,3 +12,8 @@ pypdf
 python-dotenv
 watchdog
 google-api-python-client
+PyPDF2
+python-docx
+pandas
+openpyxl
+requests

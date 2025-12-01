@@ -62,8 +62,15 @@ def render_research_view():
         if not topic:
             st.warning("Please enter a research topic.")
             return
+        
+        # Clear previous research
+        st.session_state.research_active = False
+        st.session_state.research_history = []
+        
+        # Show streaming research process
+        with st.status("🔍 Researching...", expanded=True) as status:
+            st.write("Initializing agent...")
             
-        with st.spinner("Agent is researching..."):
             # Initialize Graph
             app = create_graph()
             
@@ -76,26 +83,51 @@ def render_research_view():
                 "web_sources": st.session_state.get("web_sources", {})
             }
             
-            # Run Graph
-            final_state = app.invoke(initial_state)
+            # Stream through execution and show reasoning
+            reasoning_steps = []
+            final_state = None
             
-            # Display Results
-            findings = final_state.get("research_findings")
-            if findings:
-                st.session_state.research_active = True
-                st.session_state.research_history.append({
-                    "role": "assistant",
-                    "content": findings
-                })
-            else:
-                st.error("Research failed to produce findings.")
+            try:
+                for event in app.stream(initial_state):
+                    if isinstance(event, dict):
+                        for node_name, node_output in event.items():
+                            if node_name != "__end__":
+                                step_msg = f"⚙️ **{node_name.title()}** is working..."
+                                st.write(step_msg)
+                                
+                                # Store final state
+                                if "research_findings" in node_output:
+                                    final_state = node_output
+                
+                # Update status
+                status.update(label="✅ Research Complete!", state="complete", expanded=False)
+                
+                # Display Results
+                if final_state and final_state.get("research_findings"):
+                    findings = final_state.get("research_findings")
+                    st.session_state.research_active = True
+                    st.session_state.research_history.append({
+                        "role": "assistant",
+                        "content": findings
+                    })
+                    st.rerun()
+                else:
+                    st.error("Research failed to produce findings.")
+                    
+            except Exception as e:
+                status.update(label="❌ Research Failed", state="error")
+                st.error(f"Error during research: {str(e)}")
     
     # Display research findings
     if st.session_state.research_active and st.session_state.research_history:
         st.markdown("---")
         for message in st.session_state.research_history:
-            with st.container():
-                st.markdown(message["content"])
+            if message["role"] == "user":
+                with st.chat_message("user"):
+                    st.markdown(message["content"])
+            else:
+                with st.chat_message("assistant"):
+                    st.markdown(message["content"])
         
         # Follow-up questions
         st.markdown("---")
@@ -104,41 +136,81 @@ def render_research_view():
         follow_up = st.chat_input("Ask a follow-up question or request analysis...")
         
         if follow_up:
-            # Add user question to history
+            # Display user question immediately
+            with st.chat_message("user"):
+                st.markdown(follow_up)
+            
+            # Add to history
             st.session_state.research_history.append({
                 "role": "user",
                 "content": follow_up
             })
             
-            with st.spinner("Analyzing..."):
-                app = create_graph()
+            # Show agent reasoning in real-time
+            with st.chat_message("assistant"):
+                reasoning_placeholder = st.empty()
                 
-                # Convert history to messages
-                messages = []
+                # Build conversation context from history
+                from langchain_core.messages import HumanMessage, AIMessage
+                conversation_messages = []
+                
                 for msg in st.session_state.research_history:
                     if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
+                        conversation_messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        conversation_messages.append(AIMessage(content=msg["content"]))
                 
+                # Create state with full conversation context
+                app = create_graph()
                 follow_up_state = {
-                    "messages": messages,
+                    "messages": conversation_messages,
                     "current_mode": "research",
                     "research_topic": topic,
-                    "jurisdiction": jurisdiction
+                    "jurisdiction": jurisdiction,
+                    "web_sources": st.session_state.get("web_sources", {})
                 }
                 
-                result = app.invoke(follow_up_state)
-                response = result["messages"][-1].content
+                # Stream the agent's reasoning
+                reasoning_steps = []
+                final_response = None
                 
-                # Format follow-up response
-                formatted_response = format_follow_up_response(response)
-                
-                st.session_state.research_history.append({
-                    "role": "assistant",
-                    "content": formatted_response
-                })
-                
-                st.rerun()
+                try:
+                    # Stream through the graph execution
+                    for event in app.stream(follow_up_state):
+                        # Extract reasoning from events
+                        if isinstance(event, dict):
+                            for node_name, node_output in event.items():
+                                if node_name != "__end__":
+                                    # Show which node is executing
+                                    reasoning_steps.append(f"🔍 **{node_name.title()}:** Processing...")
+                                    reasoning_placeholder.markdown("\n\n".join(reasoning_steps))
+                                
+                                # If messages were updated, show the latest
+                                if "messages" in node_output:
+                                    latest_msg = node_output["messages"][-1]
+                                    if hasattr(latest_msg, 'content'):
+                                        final_response = latest_msg.content
+                    
+                    # If we got a response, format and display it
+                    if final_response:
+                        # Clear reasoning steps
+                        reasoning_placeholder.empty()
+                        
+                        # Display final response
+                        st.markdown(final_response)
+                        
+                        # Add to history
+                        st.session_state.research_history.append({
+                            "role": "assistant",
+                            "content": final_response
+                        })
+                    else:
+                        reasoning_placeholder.error("No response received from agent.")
+                        
+                except Exception as e:
+                    reasoning_placeholder.error(f"Error during research: {str(e)}")
+                    st.error(f"Details: {str(e)}")
 
 def format_follow_up_response(response: str) -> str:
     """Format follow-up responses cleanly."""
-    return f"**Analysis:**\n\n{response}"
+    return f"{response}"
