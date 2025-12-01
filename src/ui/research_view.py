@@ -43,6 +43,9 @@ def render_research_view():
         st.session_state.research_active = False
     if "research_history" not in st.session_state:
         st.session_state.research_history = []
+    if "research_session_id" not in st.session_state:
+        from src.utils.phoenix_tracer import generate_session_id
+        st.session_state.research_session_id = generate_session_id()
     
     col1, col2 = st.columns(2)
     with col1:
@@ -63,13 +66,15 @@ def render_research_view():
             st.warning("Please enter a research topic.")
             return
         
-        # Clear previous research
+        # Clear previous research and generate new session
         st.session_state.research_active = False
         st.session_state.research_history = []
+        from src.utils.phoenix_tracer import generate_session_id
+        st.session_state.research_session_id = generate_session_id()
         
         # Show streaming research process
         with st.status("🔍 Researching...", expanded=True) as status:
-            st.write("Initializing agent...")
+            st.write("🎯 Creating research plan...")
             
             # Initialize Graph
             app = create_graph()
@@ -83,21 +88,57 @@ def render_research_view():
                 "web_sources": st.session_state.get("web_sources", {})
             }
             
-            # Stream through execution and show reasoning
-            reasoning_steps = []
-            final_state = None
+            # Stream through execution and show plan steps
+            plan_displayed = False
+            current_step_num = 0
+            step_placeholders = {}
             
             try:
-                for event in app.stream(initial_state):
-                    if isinstance(event, dict):
-                        for node_name, node_output in event.items():
-                            if node_name != "__end__":
-                                step_msg = f"⚙️ **{node_name.title()}** is working..."
-                                st.write(step_msg)
+                # Use session context for Phoenix tracing
+                from src.utils.phoenix_tracer import using_session, set_session_attributes
+                
+                with using_session(st.session_state.research_session_id):
+                    # Set session attributes
+                    set_session_attributes(
+                        st.session_state.research_session_id,
+                        mode="research",
+                        topic=topic
+                    )
+                    
+                    for event in app.stream(initial_state):
+                        if isinstance(event, dict):
+                            for node_name, node_output in event.items():
+                                if node_name == "research_planner":
+                                    # Display the plan
+                                    plan = node_output.get("plan", [])
+                                    if plan:
+                                        st.write("📋 **Research Plan:**")
+                                        for i, step in enumerate(plan, 1):
+                                            step_placeholder = st.empty()
+                                            step_placeholders[i] = step_placeholder
+                                            step_placeholder.write(f"{i}. ⏳ {step}")
+                                        plan_displayed = True
                                 
-                                # Store final state
-                                if "research_findings" in node_output:
-                                    final_state = node_output
+                                elif node_name == "research_executor":
+                                    # Update current step status
+                                    current_step = node_output.get("current_step")
+                                    step_results = node_output.get("step_results", [])
+                                    
+                                    if step_results:
+                                        # Mark completed step
+                                        step_num = len(step_results)
+                                        if step_num in step_placeholders:
+                                            last_result = step_results[-1]
+                                            if "ERROR" in last_result.get("result", ""):
+                                                step_placeholders[step_num].write(f"{step_num}. ❌ {last_result['step']}")
+                                            else:
+                                                step_placeholders[step_num].write(f"{step_num}. ✅ {last_result['step']}")
+                                
+                                elif node_name == "research_synthesizer":
+                                    st.write("🔄 Synthesizing findings...")
+                                    findings = node_output.get("research_findings")
+                                    if findings:
+                                        final_state = node_output
                 
                 # Update status
                 status.update(label="✅ Research Complete!", state="complete", expanded=False)
@@ -117,6 +158,9 @@ def render_research_view():
             except Exception as e:
                 status.update(label="❌ Research Failed", state="error")
                 st.error(f"Error during research: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+
     
     # Display research findings
     if st.session_state.research_active and st.session_state.research_history:
@@ -175,21 +219,31 @@ def render_research_view():
                 final_response = None
                 
                 try:
-                    # Stream through the graph execution
-                    for event in app.stream(follow_up_state):
-                        # Extract reasoning from events
-                        if isinstance(event, dict):
-                            for node_name, node_output in event.items():
-                                if node_name != "__end__":
-                                    # Show which node is executing
-                                    reasoning_steps.append(f"🔍 **{node_name.title()}:** Processing...")
-                                    reasoning_placeholder.markdown("\n\n".join(reasoning_steps))
-                                
-                                # If messages were updated, show the latest
-                                if "messages" in node_output:
-                                    latest_msg = node_output["messages"][-1]
-                                    if hasattr(latest_msg, 'content'):
-                                        final_response = latest_msg.content
+                    # Use same session for follow-up questions
+                    from src.utils.phoenix_tracer import using_session, set_session_attributes
+                    
+                    with using_session(st.session_state.research_session_id):
+                        set_session_attributes(
+                            st.session_state.research_session_id,
+                            mode="research_followup",
+                            topic=follow_up
+                        )
+                        
+                        # Stream through the graph execution
+                        for event in app.stream(follow_up_state):
+                            # Extract reasoning from events
+                            if isinstance(event, dict):
+                                for node_name, node_output in event.items():
+                                    if node_name != "__end__":
+                                        # Show which node is executing
+                                        reasoning_steps.append(f"🔍 **{node_name.title()}:** Processing...")
+                                        reasoning_placeholder.markdown("\n\n".join(reasoning_steps))
+                                    
+                                    # If messages were updated, show the latest
+                                    if "messages" in node_output:
+                                        latest_msg = node_output["messages"][-1]
+                                        if hasattr(latest_msg, 'content'):
+                                            final_response = latest_msg.content
                     
                     # If we got a response, format and display it
                     if final_response:

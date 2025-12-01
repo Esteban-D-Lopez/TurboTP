@@ -334,12 +334,30 @@ Use the benchmarking study and agreements provided below.
     
     return section_prompts.get(section, base_instruction + "\n\n" + context)
 
-# --- Assistant Node ---
+# --- Assistant Node (ReAct Pattern) ---
 def assistant_node(state: AgentState):
+    """
+    Conversational assistant using ReAct pattern.
+    Has access to search tools for answering questions.
+    """
     llm = get_llm()
     messages = state["messages"]
     
-    # Simple chatbot logic
-    response = llm.invoke(messages)
+    system_message = (
+        "You are a helpful Transfer Pricing assistant. "
+        "Use your tools when you need to look up regulations or information. "
+        "Provide clear, concise answers."
+    )
+    
+    tools = [search_regulations, web_search]
+    
+    # Create ReAct agent
+    agent_app = create_react_agent(llm, tools, prompt=system_message)
+    
+    # Run agent
+    result = agent_app.invoke({"messages": messages})
+    
+    # Extract response
+    response = result["messages"][-1]
     
     return {"messages": [response]}

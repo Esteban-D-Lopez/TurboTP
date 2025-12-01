@@ -17,3 +17,8 @@ class AgentState(TypedDict):
     selected_section: Optional[str]  # Section being drafted
     data_sources: Optional[dict]  # Section-specific data sources
     transaction_details: Optional[dict]  # For economic analysis
+    # Plan-and-Execute fields
+    plan: Optional[List[str]]  # List of planned steps
+    current_step: Optional[int]  # Which step is executing (0-indexed)
+    step_results: Optional[List[dict]]  # Results from completed steps
+    needs_replan: Optional[bool]  # Whether to trigger replanning
