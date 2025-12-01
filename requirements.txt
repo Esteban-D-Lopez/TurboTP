@@ -11,3 +11,4 @@ chromadb
 pypdf
 python-dotenv
 watchdog
+google-api-python-client

@@ -11,3 +11,4 @@ class AgentState(TypedDict):
     document_type: Optional[str]
     draft_content: Optional[str]
     jurisdiction: Optional[str]
+    web_sources: Optional[dict]  # Enabled web sources for research
