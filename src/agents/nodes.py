@@ -1,7 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate
 from .state import AgentState
 from .tools import search_regulations, web_search
 
@@ -35,27 +33,34 @@ def supervisor_node(state: AgentState):
         
     return {"next": "__end__"}
 
+from langgraph.prebuilt import create_react_agent
+
 # --- Researcher Node ---
 def research_node(state: AgentState):
     llm = get_llm()
     topic = state.get("research_topic")
     jurisdiction = state.get("jurisdiction", "General")
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an elite Transfer Pricing Senior Consultant. "
-                   "Your goal is to conduct thorough research on the given topic. "
-                   "Always cite your sources (IRC 482, OECD Guidelines, etc.)."),
-        ("human", f"Research Topic: {topic}\nJurisdiction: {jurisdiction}\n\n"
-                  "Use your tools to find relevant regulations and information. "
-                  "Summarize your findings in a structured format.")
-    ])
+    system_message = (
+        "You are an elite Transfer Pricing Senior Consultant. "
+        "Your goal is to conduct thorough research on the given topic. "
+        "Always cite your sources (IRC 482, OECD Guidelines, etc.)."
+    )
+    
+    prompt = f"Research Topic: {topic}\nJurisdiction: {jurisdiction}\n\nUse your tools to find relevant regulations and information. Summarize your findings in a structured format."
     
     tools = [search_regulations, web_search]
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
     
-    result = agent_executor.invoke({"input": topic})
-    findings = result["output"]
+    # Create the React Agent (Compiled Graph)
+    # Note: Using prompt argument for compatibility with installed version
+    agent_app = create_react_agent(llm, tools, prompt=system_message)
+    
+    # Invoke the agent
+    # Note: create_react_agent expects a list of messages.
+    result = agent_app.invoke({"messages": [HumanMessage(content=prompt)]})
+    
+    # Extract the final response
+    findings = result["messages"][-1].content
     
     return {
         "research_findings": findings,
