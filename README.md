@@ -2,7 +2,7 @@
 
 TurboTP is an advanced, agentic AI workspace designed to revolutionize Transfer Pricing (TP) consulting. Built on **Google Gemini 2.5 Flash** and **LangGraph**, it employs a multi-agent "Plan-and-Execute" architecture to handle complex workflows like deep regulatory research, documentation drafting, and strategic advisory.
 
-![Architecture Diagram](langgraph_architecture.png)
+![Architecture Diagram](docs/architecture/diagram.png)
 
 ## 🚀 Key Features
 

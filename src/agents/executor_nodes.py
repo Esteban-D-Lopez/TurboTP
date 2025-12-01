@@ -156,8 +156,32 @@ def composer_executor_node(state: AgentState):
             # Data extraction step
             if "10-k" in step_lower or "10k" in step_lower:
                 if "10k_file" in data_sources:
-                    # process_uploaded_file handles saving to temp and extraction
-                    text = process_uploaded_file(data_sources["10k_file"])
+                    source = data_sources["10k_file"]
+                    
+                    # Handle string (KB file) vs UploadedFile
+                    if isinstance(source, str):
+                        # It's a filename from the Knowledge Base
+                        from src.utils.rag_manager import KNOWLEDGE_BASE_DIR
+                        file_path = os.path.join(KNOWLEDGE_BASE_DIR, source)
+                        
+                        # Use appropriate extractor based on extension
+                        if source.lower().endswith('.pdf'):
+                            from src.utils.file_processor import extract_text_from_pdf
+                            text = extract_text_from_pdf(file_path)
+                        elif source.lower().endswith('.docx'):
+                            from src.utils.file_processor import extract_text_from_docx
+                            text = extract_text_from_docx(file_path)
+                        else:
+                            # Fallback for text files
+                            try:
+                                with open(file_path, 'r') as f:
+                                    text = f.read()
+                            except Exception as e:
+                                text = f"Error reading file: {str(e)}"
+                    else:
+                        # It's a Streamlit UploadedFile
+                        text = process_uploaded_file(source)
+                        
                     if text.startswith("Error") or text.startswith("Unsupported"):
                         result = f"Failed to extract 10-K: {text}"
                     else:

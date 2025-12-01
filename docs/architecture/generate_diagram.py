@@ -12,7 +12,7 @@ def generate_diagram():
         app = create_graph()
         png_data = app.get_graph().draw_mermaid_png()
         
-        output_path = "/Users/esteban/.gemini/antigravity/brain/dffc5834-c257-4c47-86fc-bee72a736ad1/langgraph_architecture.png"
+        output_path = "docs/architecture/diagram.png"
         
         with open(output_path, "wb") as f:
             f.write(png_data)

@@ -5,7 +5,7 @@ Handles document ingestion, splitting, and adding to Vector Store.
 import os
 import shutil
 from typing import List
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.agents.tools import get_vectorstore
 from src.utils.file_processor import process_uploaded_file
 
@@ -15,9 +15,23 @@ def initialize_kb():
     """Ensure knowledge base directory exists."""
     os.makedirs(KNOWLEDGE_BASE_DIR, exist_ok=True)
 
+import json
+
 def list_documents() -> List[str]:
-    """List all documents in the knowledge base directory."""
+    """List all documents in the knowledge base (checking Vector Store tracking first)."""
     initialize_kb()
+    
+    # Check for tracking file in ChromaDB directory
+    tracking_file = "./chroma_db/ingested_files.json"
+    if os.path.exists(tracking_file):
+        try:
+            with open(tracking_file, "r") as f:
+                ingested_files = json.load(f)
+            return list(ingested_files.keys())
+        except Exception:
+            pass
+            
+    # Fallback to directory listing
     return [f for f in os.listdir(KNOWLEDGE_BASE_DIR) if os.path.isfile(os.path.join(KNOWLEDGE_BASE_DIR, f)) and not f.startswith('.')]
 
 def add_document_to_kb(uploaded_file) -> str:

@@ -1,6 +1,7 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage
 from src.agents.graph import create_graph
+from src.utils.rag_manager import list_documents
 
 # Section configurations
 SECTIONS = {
@@ -165,19 +166,32 @@ def render_company_analysis_inputs(data_config):
     
     with col1:
         st.markdown("**10-K Report**")
-        uploaded_10k = st.file_uploader(
-            "Upload 10-K Report",
-            type=["pdf"],
-            key="10k_upload",
-            help="Upload the company's latest 10-K filing"
-        )
         
-        if uploaded_10k:
-            st.session_state.composer_uploads["10k_file"] = uploaded_10k
-            data_config["10k_file"] = uploaded_10k
-        elif "10k_file" in st.session_state.composer_uploads:
-            data_config["10k_file"] = st.session_state.composer_uploads["10k_file"]
-            st.info(f"Using previously uploaded: {data_config['10k_file'].name}")
+        # Option to select from Knowledge Base
+        kb_docs = list_documents()
+        kb_10k_options = [d for d in kb_docs if "10-k" in d.lower() or "annual" in d.lower() or "report" in d.lower()]
+        
+        use_kb = st.checkbox("Select from Knowledge Base", key="use_kb_10k")
+        
+        if use_kb and kb_10k_options:
+            selected_10k = st.selectbox("Select 10-K from KB", kb_10k_options, key="kb_10k_select")
+            if selected_10k:
+                data_config["10k_file"] = selected_10k  # Pass filename string
+                st.info(f"Using KB Document: {selected_10k}")
+        else:
+            uploaded_10k = st.file_uploader(
+                "Upload 10-K Report",
+                type=["pdf"],
+                key="10k_upload",
+                help="Upload the company's latest 10-K filing"
+            )
+            
+            if uploaded_10k:
+                st.session_state.composer_uploads["10k_file"] = uploaded_10k
+                data_config["10k_file"] = uploaded_10k
+            elif "10k_file" in st.session_state.composer_uploads:
+                data_config["10k_file"] = st.session_state.composer_uploads["10k_file"]
+                st.info(f"Using previously uploaded: {data_config['10k_file'].name}")
     
     with col2:
         st.markdown("**Web Research**")
