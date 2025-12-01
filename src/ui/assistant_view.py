@@ -38,7 +38,7 @@ def render_assistant_view():
                 with col1:
                     st.text(f"📄 {doc}")
                 with col2:
-                    if st.button("🗑️", key=f"del_{doc}", help=f"Remove {doc}"):
+                    if st.button("🗑️", key=f"del_{doc}", help=f"Remove {doc}", type="tertiary"):
                         with st.spinner("Removing..."):
                             res = remove_document(doc)
                             st.toast(res)
