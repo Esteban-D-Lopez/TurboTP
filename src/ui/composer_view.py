@@ -69,6 +69,10 @@ def render_composer_view():
     
     data_config = {}
     
+    # Initialize session state for uploads if not exists
+    if "composer_uploads" not in st.session_state:
+        st.session_state.composer_uploads = {}
+    
     # Section-specific inputs
     if selected_section == "Executive Summary":
         render_exec_summary_inputs(data_config)
@@ -104,22 +108,31 @@ def render_composer_view():
                 "data_sources": data_config
             }
             
-            final_state = app.invoke(initial_state)
-            
-            draft = final_state.get("draft_content")
-            if draft:
-                st.markdown("### Generated Draft")
-                st.markdown(draft)
+            try:
+                final_state = app.invoke(initial_state)
                 
-                # Download button
-                st.download_button(
-                    label="Download Draft",
-                    data=draft,
-                    file_name=f"{selected_section.replace(' ', '_')}_draft.md",
-                    mime="text/markdown"
-                )
-            else:
-                st.error("Drafting failed.")
+                draft = final_state.get("draft_content")
+                if draft:
+                    st.markdown("### Generated Draft")
+                    st.markdown(draft)
+                    
+                    # Download button
+                    st.download_button(
+                        label="Download Draft",
+                        data=draft,
+                        file_name=f"{selected_section.replace(' ', '_')}_draft.md",
+                        mime="text/markdown"
+                    )
+                else:
+                    # Check for step errors
+                    step_results = final_state.get("step_results", [])
+                    errors = [res["result"] for res in step_results if "ERROR" in str(res.get("result", ""))]
+                    if errors:
+                        st.error(f"Drafting failed with errors:\n" + "\n".join(errors))
+                    else:
+                        st.error("Drafting failed. No content generated.")
+            except Exception as e:
+                st.error(f"System Error: {str(e)}")
 
 def render_exec_summary_inputs(data_config):
     """Executive Summary data sources"""
@@ -132,7 +145,11 @@ def render_exec_summary_inputs(data_config):
             key="exec_prior"
         )
         if prior_year:
+            st.session_state.composer_uploads["exec_prior"] = prior_year
             data_config["prior_year"] = prior_year
+        elif "exec_prior" in st.session_state.composer_uploads:
+            data_config["prior_year"] = st.session_state.composer_uploads["exec_prior"]
+            st.info(f"Using previously uploaded: {data_config['prior_year'].name}")
     
     with col2:
         company_overview = st.checkbox(
@@ -156,16 +173,22 @@ def render_company_analysis_inputs(data_config):
         )
         
         if uploaded_10k:
+            st.session_state.composer_uploads["10k_file"] = uploaded_10k
             data_config["10k_file"] = uploaded_10k
+        elif "10k_file" in st.session_state.composer_uploads:
+            data_config["10k_file"] = st.session_state.composer_uploads["10k_file"]
+            st.info(f"Using previously uploaded: {data_config['10k_file'].name}")
     
     with col2:
         st.markdown("**Web Research**")
-        web_sources = st.multiselect(
-            "Select domains for research",
-            ["Company Website", "SEC Filings", "News Sources", "Industry Publications"],
-            default=["Company Website", "SEC Filings"]
+        web_domains = st.text_area(
+            "Domain restrictions (optional)",
+            placeholder="www.companyname.com\nwww.sec.gov",
+            help="Enter specific domains to restrict web search (optional)"
         )
-        data_config["web_sources"] = web_sources
+        if web_domains:
+            domains = [d.strip() for d in web_domains.split('\n') if d.strip()]
+            data_config["web_domains"] = domains
         
         prior_year = st.file_uploader(
             "Prior Year Section (optional)",
@@ -194,7 +217,11 @@ def render_fra_inputs(data_config):
             key="interview_notes"
         )
         if interview_notes:
+            st.session_state.composer_uploads["interview_notes"] = interview_notes
             data_config["interview_notes"] = interview_notes
+        elif "interview_notes" in st.session_state.composer_uploads:
+            data_config["interview_notes"] = st.session_state.composer_uploads["interview_notes"]
+            st.info(f"Using {len(data_config['interview_notes'])} previously uploaded files")
     
     with col2:
         prior_year = st.file_uploader(
@@ -219,12 +246,16 @@ def render_industry_analysis_inputs(data_config):
         if competitors:
             data_config["competitors"] = [c.strip() for c in competitors.split(",")]
         
-        web_domains = st.multiselect(
-            "Web search domains",
-            ["Industry Reports", "News Sources", "Market Research", "Trade Publications"],
-            default=["Industry Reports", "Market Research"]
+        st.markdown("**Web Research Domains**")
+        web_domains = st.text_area(
+            "Domain restrictions (optional)",
+            placeholder="www.industry-research-site.com",
+            help="Enter specific domains for web search (optional)",
+            key="industry_domains"
         )
-        data_config["web_domains"] = web_domains
+        if web_domains:
+            domains = [d.strip() for d in web_domains.split('\n') if d.strip()]
+            data_config["web_domains"] = domains
     
     with col2:
         industry_reports = st.file_uploader(
@@ -270,7 +301,11 @@ def render_economic_analysis_inputs(data_config):
             help="Upload benchmarking analysis results"
         )
         if benchmarking_set:
+            st.session_state.composer_uploads["benchmarking_set"] = benchmarking_set
             data_config["benchmarking_set"] = benchmarking_set
+        elif "benchmarking_set" in st.session_state.composer_uploads:
+            data_config["benchmarking_set"] = st.session_state.composer_uploads["benchmarking_set"]
+            st.info(f"Using previously uploaded: {data_config['benchmarking_set'].name}")
         
         agreements = st.file_uploader(
             "Intercompany Agreements",

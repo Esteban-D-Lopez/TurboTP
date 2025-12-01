@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from src.agents.graph import create_graph
 
 # Regulatory area mappings by jurisdiction
@@ -73,8 +73,8 @@ def render_research_view():
         st.session_state.research_session_id = generate_session_id()
         
         # Show streaming research process
-        with st.status("🔍 Researching...", expanded=True) as status:
-            st.write("🎯 Creating research plan...")
+        with st.status("Researching...", expanded=True) as status:
+            st.write("Creating research plan...")
             
             # Initialize Graph
             app = create_graph()
@@ -95,16 +95,11 @@ def render_research_view():
             
             try:
                 # Use session context for Phoenix tracing
-                from src.utils.phoenix_tracer import using_session, set_session_attributes
+                from src.utils.phoenix_tracer import using_session
+                # Initialize final_state
+                final_state = None
                 
                 with using_session(st.session_state.research_session_id):
-                    # Set session attributes
-                    set_session_attributes(
-                        st.session_state.research_session_id,
-                        mode="research",
-                        topic=topic
-                    )
-                    
                     for event in app.stream(initial_state):
                         if isinstance(event, dict):
                             for node_name, node_output in event.items():
@@ -112,11 +107,11 @@ def render_research_view():
                                     # Display the plan
                                     plan = node_output.get("plan", [])
                                     if plan:
-                                        st.write("📋 **Research Plan:**")
+                                        st.write("**Research Plan:**")
                                         for i, step in enumerate(plan, 1):
                                             step_placeholder = st.empty()
                                             step_placeholders[i] = step_placeholder
-                                            step_placeholder.write(f"{i}. ⏳ {step}")
+                                            step_placeholder.write(f"{i}. {step}")
                                         plan_displayed = True
                                 
                                 elif node_name == "research_executor":
@@ -132,16 +127,17 @@ def render_research_view():
                                             if "ERROR" in last_result.get("result", ""):
                                                 step_placeholders[step_num].write(f"{step_num}. ❌ {last_result['step']}")
                                             else:
-                                                step_placeholders[step_num].write(f"{step_num}. ✅ {last_result['step']}")
+                                                step_placeholders[step_num].write(f"{step_num}. ✓ {last_result['step']}")
                                 
                                 elif node_name == "research_synthesizer":
-                                    st.write("🔄 Synthesizing findings...")
-                                    findings = node_output.get("research_findings")
-                                    if findings:
-                                        final_state = node_output
+                                    st.write("Synthesizing findings...")
+                                
+                                # Robustly capture final state from any node that produces findings
+                                if "research_findings" in node_output:
+                                    final_state = node_output
                 
                 # Update status
-                status.update(label="✅ Research Complete!", state="complete", expanded=False)
+                status.update(label="✅ Research Complete!", state="complete", expanded=True)
                 
                 # Display Results
                 if final_state and final_state.get("research_findings"):
@@ -195,7 +191,6 @@ def render_research_view():
                 reasoning_placeholder = st.empty()
                 
                 # Build conversation context from history
-                from langchain_core.messages import HumanMessage, AIMessage
                 conversation_messages = []
                 
                 for msg in st.session_state.research_history:
@@ -218,17 +213,15 @@ def render_research_view():
                 reasoning_steps = []
                 final_response = None
                 
+                # Create a persistent expander for reasoning steps
+                with st.expander("Research Process", expanded=False):
+                    reasoning_placeholder = st.empty()
+                
                 try:
                     # Use same session for follow-up questions
-                    from src.utils.phoenix_tracer import using_session, set_session_attributes
+                    from src.utils.phoenix_tracer import using_session
                     
                     with using_session(st.session_state.research_session_id):
-                        set_session_attributes(
-                            st.session_state.research_session_id,
-                            mode="research_followup",
-                            topic=follow_up
-                        )
-                        
                         # Stream through the graph execution
                         for event in app.stream(follow_up_state):
                             # Extract reasoning from events
@@ -236,20 +229,37 @@ def render_research_view():
                                 for node_name, node_output in event.items():
                                     if node_name != "__end__":
                                         # Show which node is executing
-                                        reasoning_steps.append(f"🔍 **{node_name.title()}:** Processing...")
+                                        reasoning_steps.append(f"**{node_name.title()}:** Processing...")
                                         reasoning_placeholder.markdown("\n\n".join(reasoning_steps))
                                     
-                                    # If messages were updated, show the latest
+                                    # If messages were updated, check for actual AI response
                                     if "messages" in node_output:
                                         latest_msg = node_output["messages"][-1]
-                                        if hasattr(latest_msg, 'content'):
-                                            final_response = latest_msg.content
+                                        
+                                        # Strict check: Only accept AI/Assistant messages
+                                        is_ai = False
+                                        if isinstance(latest_msg, AIMessage):
+                                            is_ai = True
+                                        elif isinstance(latest_msg, dict) and latest_msg.get('type') == 'ai':
+                                            is_ai = True
+                                        elif isinstance(latest_msg, dict) and latest_msg.get('role') == 'assistant':
+                                            is_ai = True
+                                            
+                                        if is_ai:
+                                            # Robust content extraction
+                                            content = None
+                                            if hasattr(latest_msg, 'content'):
+                                                content = str(latest_msg.content)
+                                            elif isinstance(latest_msg, dict) and 'content' in latest_msg:
+                                                content = str(latest_msg['content'])
+                                            elif isinstance(latest_msg, str):
+                                                content = latest_msg
+                                                
+                                            if content:
+                                                final_response = content
                     
                     # If we got a response, format and display it
                     if final_response:
-                        # Clear reasoning steps
-                        reasoning_placeholder.empty()
-                        
                         # Display final response
                         st.markdown(final_response)
                         
@@ -258,8 +268,11 @@ def render_research_view():
                             "role": "assistant",
                             "content": final_response
                         })
+                        
+                        # Rerun to update history view
+                        st.rerun()
                     else:
-                        reasoning_placeholder.error("No response received from agent.")
+                        st.error("No response received from agent.")
                         
                 except Exception as e:
                     reasoning_placeholder.error(f"Error during research: {str(e)}")

@@ -1,13 +1,39 @@
+"""
+Phoenix (Arize) Observability Setup with Session Tracking
+"""
 import os
-from phoenix.otel import register
-from openinference.instrumentation.langchain import LangChainInstrumentor
-from openinference.instrumentation import using_session
-from openinference.semconv.trace import SpanAttributes
-from opentelemetry import trace
 import uuid
+
+# Try to import Phoenix components - make them optional
+try:
+    from phoenix.otel import register
+    from openinference.instrumentation.langchain import LangChainInstrumentor
+    from openinference.instrumentation import using_session
+    from openinference.semconv.trace import SpanAttributes
+    from opentelemetry import trace
+    PHOENIX_AVAILABLE = True
+except ImportError:
+    PHOENIX_AVAILABLE = False
+    # Provide dummy implementations
+    class DummySession:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+    
+    def using_session(session_id):
+        return DummySession()
+    
+    class SpanAttributes:
+        SESSION_ID = "session.id"
+        INPUT_VALUE = "input.value"
+        OUTPUT_VALUE = "output.value"
 
 def setup_phoenix():
     """Initialize Phoenix tracing with OpenTelemetry."""
+    if not PHOENIX_AVAILABLE:
+        print("⚠️ Phoenix not available - tracing disabled")
+        return
     
     # Get Phoenix configuration from environment
     collector_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces")
@@ -30,7 +56,9 @@ def generate_session_id() -> str:
 
 def get_tracer(name: str = __name__):
     """Get an OpenTelemetry tracer instance."""
-    return trace.get_tracer(name)
+    if PHOENIX_AVAILABLE:
+        return trace.get_tracer(name)
+    return None
 
 def set_session_attributes(session_id: str, mode: str = None, topic: str = None):
     """
@@ -41,6 +69,8 @@ def set_session_attributes(session_id: str, mode: str = None, topic: str = None)
         mode: Optional mode (research, composer, chat)
         topic: Optional topic/query being processed
     """
+    if not PHOENIX_AVAILABLE:
+        return
     current_span = trace.get_current_span()
     if current_span:
         current_span.set_attribute(SpanAttributes.SESSION_ID, session_id)
@@ -54,7 +84,7 @@ __all__ = [
     'setup_phoenix',
     'generate_session_id',
     'get_tracer',
-    'set_session_attributes',
-    'using_session',  # Re-export from openinference
-    'SpanAttributes'
+    'using_session',
+    'SpanAttributes',
+    'PHOENIX_AVAILABLE'
 ]

@@ -87,6 +87,11 @@ def research_executor_node(state: AgentState):
                 if web_sources.get(source, False):
                     enabled_domains.extend(domains)
             
+            # Add custom domains
+            custom_domains = web_sources.get("custom_domains", [])
+            if custom_domains:
+                enabled_domains.extend(custom_domains)
+            
             result = web_search.invoke({"query": query, "domains": enabled_domains if enabled_domains else None})
         elif tool_name == "youtube_search":
             result = youtube_search.invoke(query)
@@ -148,14 +153,23 @@ def composer_executor_node(state: AgentState):
             # Data extraction step
             if "10-k" in step_lower or "10k" in step_lower:
                 if "10k_file" in data_sources:
+                    # process_uploaded_file handles saving to temp and extraction
                     text = process_uploaded_file(data_sources["10k_file"])
-                    result = f"Extracted 10-K content ({len(text)} characters)"
+                    if text.startswith("Error") or text.startswith("Unsupported"):
+                        result = f"Failed to extract 10-K: {text}"
+                    else:
+                        result = f"Extracted 10-K content ({len(text)} characters)"
                 else:
                     result = "No 10-K file available"
             
             elif "interview" in step_lower or "notes" in step_lower:
                 if "interview_notes" in data_sources:
-                    structured = process_interview_notes(data_sources["interview_notes"])
+                    # Handle list of files
+                    notes_files = data_sources["interview_notes"]
+                    if not isinstance(notes_files, list):
+                        notes_files = [notes_files]
+                    
+                    structured = process_interview_notes(notes_files)
                     result = f"Processed interview notes:\n{structured[:500]}..."
                 else:
                     result = "No interview notes available"
@@ -163,7 +177,10 @@ def composer_executor_node(state: AgentState):
             elif "benchmark" in step_lower:
                 if "benchmarking_set" in data_sources:
                     uploaded_file = data_sources["benchmarking_set"]
-                    file_path = f"./temp_uploads/{uploaded_file.name}"
+                    # Save file first using helper
+                    from src.utils.file_processor import save_uploaded_file
+                    file_path = save_uploaded_file(uploaded_file)
+                    
                     if uploaded_file.name.endswith('.xlsx'):
                         result = parse_excel_benchmarking(file_path)
                     elif uploaded_file.name.endswith('.csv'):

@@ -102,7 +102,7 @@ def research_node(state: AgentState):
         "messages": [HumanMessage(content=formatted_findings)]
     }
 
-def format_research_output(raw_output, topic: str, jurisdiction: str) -> str:
+def format_research_output(raw_output, topic: str, jurisdiction: str, sources_used: list = None) -> str:
     """
     Clean and format the raw agent output for user-friendly display.
     Extracts clean content and removes metadata/artifacts.
@@ -160,14 +160,23 @@ def format_research_output(raw_output, topic: str, jurisdiction: str) -> str:
     clean_output = re.sub(r'\n{3,}', '\n\n', clean_output)
     clean_output = clean_output.strip()
     
-    # Build formatted output with proper markdown
-    formatted = f"# Research Findings: {topic}\n\n"
-    formatted += f"**Jurisdiction:** {jurisdiction}\n\n"
-    formatted += "---\n\n"
-    formatted += clean_output
-    formatted += "\n\n---\n\n"
-    formatted += "*Research conducted using Transfer Pricing regulatory knowledge base*"
+    # Format sources string
+    if sources_used:
+        sources_str = ", ".join(sources_used)
+    else:
+        sources_str = "Transfer Pricing regulatory knowledge base"
     
+    formatted = f"""
+## {topic.title()}
+**Jurisdiction:** {jurisdiction}
+
+---
+
+{clean_output}
+
+---
+*Research conducted using: {sources_str}*
+"""
     return formatted
 
 # --- Drafter Node ---
@@ -254,12 +263,15 @@ def build_section_prompt(section: str, framework: str, context: str) -> str:
     """
     is_oecd = "OECD" in framework
     
+    oecd_reference = 'Reference OECD Transfer Pricing Guidelines chapters (I-IX) and BEPS Actions.' if is_oecd else 'Cite IRC §482 and Treasury Regulations (§1.482-X) throughout.'
+    terminology = "Use arm's length principle terminology." if is_oecd else 'Use comparable uncontrolled terminology.'
+    
     base_instruction = f"""
 You are an expert Transfer Pricing consultant drafting documentation following {framework}.
 
-{'Reference OECD Transfer Pricing Guidelines chapters (I-IX) and BEPS Actions.' if is_oecd else 'Cite IRC §482 and Treasury Regulations (§1.482-X) throughout.'}
+{oecd_reference}
 
-{'Use arm\'s length principle terminology.' if is_oecd else 'Use comparable uncontrolled terminology.'}
+{terminology}
 """
     
     section_prompts = {
@@ -344,9 +356,12 @@ def assistant_node(state: AgentState):
     messages = state["messages"]
     
     system_message = (
-        "You are a helpful Transfer Pricing assistant. "
-        "Use your tools when you need to look up regulations or information. "
-        "Provide clear, concise answers."
+        "You are a helpful Transfer Pricing assistant with access to a regulatory knowledge base and web search.\n\n"
+        "**CORE INSTRUCTIONS:**\n"
+        "1. **Check Context First:** Before searching, check the conversation history. If the user asks to summarize, format, or explain something ALREADY discussed (e.g., 'summarize this in a table'), use the existing information directly. Do NOT use tools if the answer is already in the context.\n"
+        "2. **Tool Usage:** If the user asks about NEW regulations, guidelines, or topics not in history, YOU MUST use the 'search_regulations' tool to find authoritative information.\n"
+        "3. **Formatting:** Follow user formatting instructions strictly (e.g., 'create a table', 'bullet points').\n"
+        "4. **Quality:** Provide clear, concise answers. Do not claim lack of access without trying to search first."
     )
     
     tools = [search_regulations, web_search]

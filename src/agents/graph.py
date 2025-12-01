@@ -13,7 +13,13 @@ from .synthesizer_nodes import (
 def route_by_mode(state: AgentState) -> str:
     """Route to appropriate planner based on mode."""
     mode = state.get("current_mode")
+    messages = state.get("messages", [])
+    
     if mode == "research":
+        # If we have findings, it's a follow-up -> use Assistant
+        if state.get("research_findings"):
+            return "assistant"
+        # Otherwise, it's a new request -> use Planner
         return "research_planner"
     elif mode == "composer":
         return "composer_planner"

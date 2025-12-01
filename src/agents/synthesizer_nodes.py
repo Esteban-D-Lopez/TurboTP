@@ -21,10 +21,19 @@ def research_synthesizer_node(state: AgentState):
     topic = state.get("research_topic")
     jurisdiction = state.get("jurisdiction", "General")
     
-    # Combine all results
+    # Combine all results and track sources
     combined_findings = []
+    sources_used = set(["Regulatory Knowledge Base"])  # Always start with RAG
+    
     for i, result in enumerate(step_results, 1):
         combined_findings.append(f"### Step {i}: {result['step']}\n{result['result']}\n")
+        
+        # Track sources based on tools ACTUALLY used in results
+        tool = result.get("tool", "").lower()
+        if "web" in tool and "search" in tool:
+            sources_used.add("Web Search")
+        elif "youtube" in tool:
+            sources_used.add("YouTube")
     
     context = "\n\n".join(combined_findings)
     
@@ -37,23 +46,29 @@ def research_synthesizer_node(state: AgentState):
 **Research Steps Completed:**
 {context}
 
-Create a comprehensive, well-structured research summary that:
-1. Starts with an executive summary
-2. Organizes findings under clear headings
-3. Cites sources in brackets [IRC §482], [OECD Guidelines Ch. X], etc.
-4. Uses bullet points for key takeaways
+**IMPORTANT: Output ONLY in clean Markdown format. Do NOT use HTML tags.**
+
+Create a comprehensive research summary that:
+1. Starts with an executive summary paragraph
+2. Organizes findings under clear ### headings (use markdown ###, NOT HTML)
+3. Cites sources in brackets like [IRC §482] or [OECD Guidelines Ch. X]
+4. Uses bullet points (-) for key takeaways
 5. Is concise but comprehensive
 
-Focus on actionable insights and regulatory compliance.
+Focus on actionable insights and regulatory compliance. Use ONLY markdown formatting.
 """
     
     raw_synthesis = llm.invoke(synthesis_prompt).content
     
     # Format for clean display
-    formatted_findings = format_research_output(raw_synthesis, topic, jurisdiction)
+    # Format for clean display
+    formatted_findings = format_research_output(raw_synthesis, topic, jurisdiction, list(sources_used))
+    
+    from langchain_core.messages import AIMessage
     
     return {
-        "research_findings": formatted_findings
+        "research_findings": formatted_findings,
+        "messages": [AIMessage(content=formatted_findings)]
     }
 
 def composer_synthesizer_node(state: AgentState):
@@ -74,8 +89,11 @@ def composer_synthesizer_node(state: AgentState):
         # Combine all results if no clear draft step
         draft_content = "\n\n".join([r["result"] for r in step_results])
     
+    from langchain_core.messages import AIMessage
+    
     return {
-        "draft_content": draft_content
+        "draft_content": draft_content,
+        "messages": [AIMessage(content=draft_content)]
     }
 
 def replanner_node(state: AgentState):

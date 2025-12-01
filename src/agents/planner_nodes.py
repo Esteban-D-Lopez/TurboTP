@@ -46,14 +46,19 @@ def research_planner_node(state: AgentState):
     jurisdiction = state.get("jurisdiction", "General")
     web_sources = state.get("web_sources", {})
     
-    # Determine available tools
-    tools_available = ["search_regulations (regulatory knowledge base)"]
+    # Build list of available tools
+    tools_available = []
     
-    if any(web_sources.get(source, False) for source in ["IRS", "OECD", "Deloitte", "PwC", "EY", "KPMG"]):
-        tools_available.append("web_search (domain-restricted web search)")
+    # RAG tool (always available)
+    tools_available.append("**search_regulations** - Search the Transfer Pricing regulatory knowledge base (ChromaDB RAG). Use this for finding regulations, guidance, and technical content from IRC, Treasury Regs, OECD Guidelines, etc.")
     
+    # Web search tool (if any web sources enabled)
+    if any(web_sources.get(source, False) for source in ["IRS", "OECD", "Deloitte", "PwC", "EY", "KPMG"]) or web_sources.get("custom_domains"):
+        tools_available.append("**web_search** - Search the web with domain restrictions. Use this for recent updates, current guidance, case studies, or practical examples from authoritative sources.")
+    
+    # YouTube tool (if enabled)
     if web_sources.get("YouTube", False):
-        tools_available.append("youtube_search (educational videos)")
+        tools_available.append("**youtube_search** - Search for educational videos. Use this for visual explanations or demonstrations of concepts.")
     
     planning_prompt = f"""You are a Transfer Pricing research planner.
 
@@ -66,12 +71,19 @@ Create a 3-5 step research plan for the following request:
 {chr(10).join(f'- {tool}' for tool in tools_available)}
 
 **Requirements:**
-- Each step should specify WHAT to search and WHY
-- Use appropriate tools for each step
-- Start with regulatory knowledge base, then expand to web/video if needed
-- Final step should be synthesis/formatting
+- Each step should specify WHAT to search for and WHICH TOOL to use
+- Start with search_regulations (RAG) for foundational regulatory content
+- Use web_search for current guidance, examples, or recent updates (if available)
+- Use youtube_search for visual explanations (if available)
+- Final step should synthesize findings with proper citations
+- Be specific about search queries - don't just say "search for X", say what specific aspect to search
 
-Format as a numbered list. Be specific and actionable.
+**Format:** Numbered list with tool name and specific query for each step.
+
+Example format:
+1. Use search_regulations to find [specific regulatory content]
+2. Use web_search to research [specific current guidance]
+3. Synthesize findings into structured report
 """
     
     plan_text = llm.invoke(planning_prompt).content

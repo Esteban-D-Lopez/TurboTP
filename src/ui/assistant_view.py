@@ -42,7 +42,29 @@ def render_assistant_view():
             # Note: In a real chat loop, we'd stream or handle state differently
             # For this MVP, we just invoke once per turn
             final_state = app.invoke(initial_state)
-            response = final_state["messages"][-1].content
+            raw_response = final_state["messages"][-1]
+            
+            # Ensure we extract just the string content
+            if hasattr(raw_response, 'content'):
+                content = raw_response.content
+                if isinstance(content, list):
+                    # Handle list of text blocks (e.g. [{'type': 'text', 'text': '...'}])
+                    text_parts = []
+                    for item in content:
+                        if isinstance(item, dict):
+                            if 'text' in item:
+                                text_parts.append(item['text'])
+                            elif 'content' in item:
+                                text_parts.append(item['content'])
+                        elif isinstance(item, str):
+                            text_parts.append(item)
+                    response = "\n".join(text_parts)
+                else:
+                    response = str(content)
+            elif isinstance(raw_response, dict) and 'content' in raw_response:
+                response = str(raw_response['content'])
+            else:
+                response = str(raw_response)
             
             # Display assistant response in chat message container
             with st.chat_message("assistant"):
