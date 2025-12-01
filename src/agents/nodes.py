@@ -89,13 +89,21 @@ def research_node(state: AgentState):
         "messages": [HumanMessage(content=formatted_findings)]
     }
 
-def format_research_output(raw_output: str, topic: str, jurisdiction: str) -> str:
+def format_research_output(raw_output, topic: str, jurisdiction: str) -> str:
     """
     Clean and format the raw agent output for user-friendly display.
     Removes tool invocation artifacts and structures the output nicely.
     """
-    # Remove common artifacts from tool calls
-    clean_output = raw_output
+    # Handle different content types (string, list, dict)
+    if isinstance(raw_output, list):
+        # If it's a list, join the items
+        clean_output = "\n".join(str(item) for item in raw_output)
+    elif isinstance(raw_output, dict):
+        # If it's a dict, try to get a text representation
+        clean_output = str(raw_output.get('text', raw_output.get('content', str(raw_output))))
+    else:
+        # Assume it's already a string
+        clean_output = str(raw_output)
     
     # Remove tool call patterns like "Action: tool_name" or "Observation:"
     import re
